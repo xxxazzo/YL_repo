@@ -15,41 +15,60 @@ class YMAPS_WINDOW(QMainWindow):
 
         self.pixmap = None
         self.map_file = None
-        self.scales_choices = []
-        self.button.clicked.connect(self.getImage)
+        self.longitude_const = 0.0005131249999998921 * 16
+        self.latitude_const = 0.0002898125000001528 * 16
+        self.consts = [self.longitude_const, self.latitude_const]
+        self.show_button.clicked.connect(self.getImage)
+        self.switch_button.clicked.connect(lambda: self.coordinates.clearFocus())
 
     def getImage(self, **kwargs):
-        try:
-            k = kwargs.get('k', 0)
-            new_z = self.scale.value() + k
-            api_server = "http://static-maps.yandex.ru/1.x/"
-            map_params = {
-                "ll": self.coordinates.text().strip(),
-                "z": new_z if new_z in range(0, 22) else self.scale.value(),
-                "l": "map"
-            }
-            response = requests.get(api_server, params=map_params)
+        self.statusBar().showMessage("Подождите...")
+        k = kwargs.get('k', 0)
+        new_z = self.scale.value() + k
+        offset = kwargs.get('offset', (0, 0))
+        new_ll = self.coordinates.text().strip()
+        if any(offset):
+            new_ll = new_ll.split(',')
+            for i in range(2):
+                new_ll[i] = str(round(offset[i] * self.consts[i] * 2 ** (16 - new_z) + float(new_ll[i]), 7))
+            new_ll = ','.join(new_ll)
 
-            if not response:
-                self.statusBar().showMessage(f"Http статус: {response.status_code} ({response.reason})")
-            else:
-                self.statusBar().showMessage("OK")
+        api_server = "http://static-maps.yandex.ru/1.x/"
+        map_params = {
+            "ll": new_ll,
+            "z": new_z if new_z in range(0, 22) else self.scale.value(),
+            "l": "map"
+        }
+        response = requests.get(api_server, params=map_params)
 
-                self.map_file = "map.png"
-                with open(self.map_file, "wb") as file:
-                    file.write(response.content)
-                self.pixmap = QPixmap(self.map_file)
-                self.map_image_label.setPixmap(self.pixmap)
-                if new_z in range(0, 22):
-                    self.scale.setValue(map_params['z'])
-        except Exception as ex:
-            self.statusBar().showMessage(ex)
+        if not response:
+            self.statusBar().showMessage(f"Http статус: {response.status_code} ({response.reason})")
+        else:
+            self.map_file = "map.png"
+            with open(self.map_file, "wb") as file:
+                file.write(response.content)
+            self.pixmap = QPixmap(self.map_file)
+            self.map_image_label.setPixmap(self.pixmap)
+            self.coordinates.setText(new_ll)
+            self.statusBar().showMessage("OK")
+
+            if new_z in range(0, 22):
+                self.scale.setValue(map_params['z'])
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key_PageDown and self.map_file is not None:
-            self.getImage(k=1)
-        elif event.key() == Qt.Key_PageUp and self.map_file is not None:
-            self.getImage(k=-1)
+        if self.map_file is not None and not self.coordinates.hasFocus():
+            if event.key() == Qt.Key_PageDown:
+                self.getImage(k=1)
+            if event.key() == Qt.Key_PageUp:
+                self.getImage(k=-1)
+            if event.key() == Qt.Key_Down:
+                self.getImage(offset=(0, -1))
+            if event.key() == Qt.Key_Up:
+                self.getImage(offset=(0, 1))
+            if event.key() == Qt.Key_Left:
+                self.getImage(offset=(-1, 0))
+            if event.key() == Qt.Key_Right:
+                self.getImage(offset=(1, 0))
 
     def closeEvent(self, event):
         """При закрытии формы подчищаем за собой"""
