@@ -17,47 +17,100 @@ class YMAPS_WINDOW(QMainWindow):
 
         self.pixmap = None
         self.map_file = None
+        self.mode = False  # Режим координат - True; Режим поиска - False
+        # (В __init__ специально False, чтобы вызвать self.change_mode())
         self.longitude_const = 0.0005131249999998921 * 16
         self.latitude_const = 0.0002898125000001528 * 16
         self.consts = [self.longitude_const, self.latitude_const]
-        self.show_button.clicked.connect(self.getImage)
+        self.request_button.clicked.connect(self.getImage)
         self.switch_button.clicked.connect(lambda: self.coordinates.clearFocus())
+        self.change_mode_button.clicked.connect(self.change_mode)
         self.map_choices.currentTextChanged.connect(self.getImage)
+        self.change_mode()
 
     def getImage(self, **kwargs):
         self.statusBar().showMessage("Подождите...")
         k = kwargs.get('k', 0)
         new_z = self.scale.value() + k
-        offset = kwargs.get('offset', (0, 0))
-        new_ll = self.coordinates.text().strip()
-        if any(offset):
-            new_ll = new_ll.split(',')
-            for i in range(2):
-                new_ll[i] = str(round(offset[i] * self.consts[i] * 2 ** (16 - new_z) + float(new_ll[i]), 7))
-            new_ll = ','.join(new_ll)
+        if self.mode:
+            offset = kwargs.get('offset', (0, 0))
+            new_ll = self.coordinates.text().strip()
+            if any(offset):
+                new_ll = new_ll.split(',')
+                for i in range(2):
+                    new_ll[i] = str(round(offset[i] * self.consts[i] * 2 ** (16 - new_z) + float(new_ll[i]), 7))
+                new_ll = ','.join(new_ll)
+            map_params = {
+                "ll": new_ll,
+                "z": new_z if new_z in range(0, 22) else self.scale.value(),
+                "l": {'карта': 'map', 'спутник': 'sat', 'гибрид': 'sat,skl'}[self.map_choices.currentText()]
+            }
+        else:
+            geocoder_api_server = "http://geocode-maps.yandex.ru/1.x/"
+
+            geocoder_params = {
+                "apikey": "40d1649f-0493-4b70-98ba-98533de7710b",
+                "geocode": self.address.text().strip(),
+                "format": "json"}
+
+            response = requests.get(geocoder_api_server, params=geocoder_params)
+
+            if not response:
+                self.statusBar().showMessage(f"Http статус: {response.status_code} ({response.reason})")
+                return
+
+            json_response = response.json()
+            toponym = json_response["response"]["GeoObjectCollection"][
+                "featureMember"][0]["GeoObject"]
+            toponym_coodrinates = toponym["Point"]["pos"]
+            map_params = {
+                'll': ','.join(toponym_coodrinates.split()),
+                "z": new_z if new_z in range(0, 22) else self.scale.value(),
+                'pt': f'{','.join(toponym_coodrinates.split())},pm2gnl',
+                "l": {'карта': 'map', 'спутник': 'sat', 'гибрид': 'sat,skl'}[self.map_choices.currentText()]}
 
         api_server = "http://static-maps.yandex.ru/1.x/"
-        map_params = {
-            "ll": new_ll,
-            "z": new_z if new_z in range(0, 22) else self.scale.value(),
-            "l": {'карта': 'map', 'спутник': 'sat', 'гибрид': 'sat,skl'}[self.map_choices.currentText()]
-        }
+
         response = requests.get(api_server, params=map_params)
 
         if not response:
             self.statusBar().showMessage(f"Http статус: {response.status_code} ({response.reason})")
         else:
-
             self.map_file = "map.png"
             im = Image.open(BytesIO(response.content))
             im.save(self.map_file)
             self.pixmap = QPixmap(self.map_file)
             self.map_image_label.setPixmap(self.pixmap)
-            self.coordinates.setText(new_ll)
+            if self.mode:
+                self.coordinates.setText(new_ll)
             self.statusBar().showMessage("OK")
 
             if new_z in range(0, 22):
                 self.scale.setValue(map_params['z'])
+
+    def change_mode(self):
+        if self.mode:
+            self.mode = False
+            self.request_button.setText('Искать')
+            self.change_mode_button.setText('Режим координат')
+            self.switch_button.setEnabled(False)
+            self.label_3.setVisible(False)
+            self.label_6.setVisible(True)
+            self.label.setVisible(False)
+            self.coordinates.setVisible(False)
+            self.label_5.setVisible(True)
+            self.address.setVisible(True)
+        else:
+            self.mode = True
+            self.request_button.setText('Отобразить')
+            self.change_mode_button.setText('Режим поиска')
+            self.switch_button.setEnabled(True)
+            self.label_3.setVisible(True)
+            self.label_6.setVisible(False)
+            self.label.setVisible(True)
+            self.coordinates.setVisible(True)
+            self.label_5.setVisible(False)
+            self.address.setVisible(False)
 
     def keyPressEvent(self, event):
         if self.map_file is not None and not self.coordinates.hasFocus():
