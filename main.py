@@ -7,6 +7,7 @@ from PyQt5 import uic
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.QtCore import Qt
 from io import BytesIO
+from PIL import Image
 
 
 class YMAPS_WINDOW(QMainWindow):
@@ -48,8 +49,8 @@ class YMAPS_WINDOW(QMainWindow):
         else:
 
             self.map_file = "map.png"
-            with open(self.map_file, "wb") as file:
-                file.write(response.content)
+            im = Image.open(BytesIO(response.content))
+            im.save(self.map_file)
             self.pixmap = QPixmap(self.map_file)
             self.map_image_label.setPixmap(self.pixmap)
             self.coordinates.setText(new_ll)
