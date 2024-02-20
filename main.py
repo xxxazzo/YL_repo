@@ -6,6 +6,7 @@ from PyQt5.QtGui import QPixmap
 from PyQt5 import uic
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.QtCore import Qt
+from io import BytesIO
 
 
 class YMAPS_WINDOW(QMainWindow):
@@ -20,6 +21,7 @@ class YMAPS_WINDOW(QMainWindow):
         self.consts = [self.longitude_const, self.latitude_const]
         self.show_button.clicked.connect(self.getImage)
         self.switch_button.clicked.connect(lambda: self.coordinates.clearFocus())
+        self.map_choices.currentTextChanged.connect(self.getImage)
 
     def getImage(self, **kwargs):
         self.statusBar().showMessage("Подождите...")
@@ -37,13 +39,14 @@ class YMAPS_WINDOW(QMainWindow):
         map_params = {
             "ll": new_ll,
             "z": new_z if new_z in range(0, 22) else self.scale.value(),
-            "l": "map"
+            "l": {'карта': 'map', 'спутник': 'sat', 'гибрид': 'sat,skl'}[self.map_choices.currentText()]
         }
         response = requests.get(api_server, params=map_params)
 
         if not response:
             self.statusBar().showMessage(f"Http статус: {response.status_code} ({response.reason})")
         else:
+
             self.map_file = "map.png"
             with open(self.map_file, "wb") as file:
                 file.write(response.content)
