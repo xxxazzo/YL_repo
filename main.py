@@ -23,7 +23,8 @@ class YMAPS_WINDOW(QMainWindow):
         self.latitude_const = 0.0002898125000001528 * 16
         self.consts = [self.longitude_const, self.latitude_const]
         self.request_button.clicked.connect(self.getImage)
-        self.switch_button.clicked.connect(lambda: self.coordinates.clearFocus())
+        self.switch_button.clicked.connect(
+            lambda: self.coordinates.clearFocus() if self.mode else self.address.clearFocus())
         self.change_mode_button.clicked.connect(self.change_mode)
         self.map_choices.currentTextChanged.connect(self.getImage)
         self.change_mode()
@@ -46,6 +47,7 @@ class YMAPS_WINDOW(QMainWindow):
                 "l": {'карта': 'map', 'спутник': 'sat', 'гибрид': 'sat,skl'}[self.map_choices.currentText()]
             }
         else:
+            offset = kwargs.get('offset', (0, 0))
             geocoder_api_server = "http://geocode-maps.yandex.ru/1.x/"
 
             geocoder_params = {
@@ -63,6 +65,31 @@ class YMAPS_WINDOW(QMainWindow):
             toponym = json_response["response"]["GeoObjectCollection"][
                 "featureMember"][0]["GeoObject"]
             toponym_coodrinates = toponym["Point"]["pos"]
+
+            if any(offset):
+                new_ll = toponym_coodrinates.split()
+                for i in range(2):
+                    new_ll[i] = str(round(offset[i] * self.consts[i] * 2 ** (16 - new_z) + float(new_ll[i]), 7))
+
+                geocoder_api_server = "http://geocode-maps.yandex.ru/1.x/"
+
+                geocoder_params = {
+                    "apikey": "40d1649f-0493-4b70-98ba-98533de7710b",
+                    "geocode": ','.join(new_ll),
+                    "format": "json"}
+
+                response = requests.get(geocoder_api_server, params=geocoder_params)
+
+                if not response:
+                    self.statusBar().showMessage(f"Http статус: {response.status_code} ({response.reason})")
+                    return
+
+                json_response = response.json()
+                toponym = json_response["response"]["GeoObjectCollection"][
+                    "featureMember"][0]["GeoObject"]
+                self.address.setText(toponym['metaDataProperty']['GeocoderMetaData']['text'])
+                toponym_coodrinates = ' '.join(new_ll)
+
             map_params = {
                 'll': ','.join(toponym_coodrinates.split()),
                 "z": new_z if new_z in range(0, 22) else self.scale.value(),
@@ -93,9 +120,6 @@ class YMAPS_WINDOW(QMainWindow):
             self.mode = False
             self.request_button.setText('Искать')
             self.change_mode_button.setText('Режим координат')
-            self.switch_button.setEnabled(False)
-            self.label_3.setVisible(False)
-            self.label_6.setVisible(True)
             self.label.setVisible(False)
             self.coordinates.setVisible(False)
             self.label_5.setVisible(True)
@@ -104,9 +128,6 @@ class YMAPS_WINDOW(QMainWindow):
             self.mode = True
             self.request_button.setText('Отобразить')
             self.change_mode_button.setText('Режим поиска')
-            self.switch_button.setEnabled(True)
-            self.label_3.setVisible(True)
-            self.label_6.setVisible(False)
             self.label.setVisible(True)
             self.coordinates.setVisible(True)
             self.label_5.setVisible(False)
