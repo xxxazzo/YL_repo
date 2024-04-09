@@ -27,6 +27,7 @@ class YMAPS_WINDOW(QMainWindow):
             lambda: self.coordinates.clearFocus() if self.mode else self.address.clearFocus())
         self.change_mode_button.clicked.connect(self.change_mode)
         self.map_choices.currentTextChanged.connect(self.getImage)
+        self.reset_button.clicked.connect(self.reset)
         self.change_mode()
 
     def getImage(self, **kwargs):
@@ -114,6 +115,11 @@ class YMAPS_WINDOW(QMainWindow):
 
             if new_z in range(0, 22):
                 self.scale.setValue(map_params['z'])
+
+    def reset(self):
+        self.coordinates.clear()
+        self.address.clear()
+        self.map_image_label.clear()
 
     def change_mode(self):
         if self.mode:
